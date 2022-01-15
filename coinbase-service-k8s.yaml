@@ -23,8 +23,6 @@ spec:
         env:
           - name: DB_HOSTNAME
             value: "mysql"                       
-          - name: DB_NAME
-            value: "usermgmt"
           - name: ENV
             value : ${ENV}
 ---
