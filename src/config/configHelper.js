@@ -1,7 +1,6 @@
 import AWS from 'aws-sdk';
 import logger from '../util/logger';
-
-AWS.config.update({ region: 'eu-west-2' });
+AWS.config.update({ region: 'us-east-1' });
 const ssm = new AWS.SSM();
 
 const values = {};
