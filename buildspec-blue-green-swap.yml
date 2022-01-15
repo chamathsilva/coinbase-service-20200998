@@ -2,8 +2,8 @@ version: 0.2
 
 env:
   variables:
-    AWS_ACCOUNT_ID: '362392363900'
-    CLUSTER_NAME : 'my-cluster'
+    AWS_ACCOUNT_ID: '036710734874'
+    # CLUSTER_NAME : 'my-cluster'
 
 phases:
   install:

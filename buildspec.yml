@@ -3,7 +3,7 @@ version: 0.2
 env:
   variables:
     IMAGE_REPO_NAME: 'dev-coinbase-ecr-repository'
-    AWS_ACCOUNT_ID: '362392363900'
+    AWS_ACCOUNT_ID: '036710734874'
 
 phases:
   install:
