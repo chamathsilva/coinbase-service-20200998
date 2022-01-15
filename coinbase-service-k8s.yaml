@@ -1,0 +1,61 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${ENV}-coinbase-pod-deployment
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${ENV}-coinbase-pod
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${ENV}-coinbase-pod
+    spec:
+      containers:
+      - image: ${IMAGE_URI}
+        imagePullPolicy: Always
+        name: ${ENV}-coinbase-container 
+        ports:
+        - containerPort: 8080
+        env:
+          - name: DB_HOSTNAME
+            value: "mysql"                       
+          - name: DB_NAME
+            value: "usermgmt"
+          - name: ENV
+            value : ${ENV}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${ENV}-coinbase-service
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: ${ENV}-coinbase-pod
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${ENV}-coinbase-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /*
+            backend:
+              serviceName:  ${ENV}-coinbase-service
+              servicePort: 80

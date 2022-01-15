@@ -1,0 +1,8 @@
+.git
+.env*
+.editorconfig
+.gitignore
+test.sh
+logs/
+LICENSE.md
+README.md

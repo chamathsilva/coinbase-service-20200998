@@ -1,0 +1,73 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_ACCOUNT_ID: '362392363900'
+    CLUSTER_NAME : 'my-cluster'
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 14
+    commands:
+      - apt install jq
+  pre_build:
+    commands:
+      - echo Installing Dependencies
+      - aws --version
+      - echo $AWS_ACCOUNT_ID
+      - echo $CLUSTER_NAME
+      - echo $NAMESPACE
+      - echo $ENV
+      - aws eks --region $AWS_DEFAULT_REGION update-kubeconfig --name $CLUSTER_NAME
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - IMAGE_URI=$(cat imageDetail.json | jq -r '.ImageURI')
+      - export IMAGE_URI=$(echo "$IMAGE_URI" | sed -r "s/dev/prod/")
+      - echo $IMAGE_URI
+  build:
+    commands:
+      - echo ${ENV} deployment started on `date`
+      - export TMP=/tmp/tmpDeploy.yaml
+
+      - export IS_NAMSESPACE_EXIST=$(kubectl get namespaces | grep ${NAMESPACE} | wc -l)
+      - if [ ${IS_NAMSESPACE_EXIST} -eq 0 ]; then kubectl create namespace ${NAMESPACE}; fi;
+
+      # get the service details
+      - export SERVICE=$(kubectl get svc blue-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - echo $SERVICE
+      # # Create the blue service if it does not exist
+      - if [ ! $SERVICE ]; then envsubst < coinbase-service-k8s.yaml > ${TMP}; kubectl apply -f ${TMP}; fi;
+      # check the deployment rollout status
+      - if [ ! $SERVICE ]; then kubectl rollout status deployment/blue-coinbase-pod-deployment -n ${NAMESPACE}; fi;
+
+      - export TMP_PATCH=/tmp/tmpPatch.yaml
+      # blue service selector 
+      - export BLUE_SELECTOR=$(kubectl get svc blue-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - echo $BLUE_SELECTOR
+      # green service selector 
+      - export GREEN_SELECTOR=$(kubectl get svc green-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - echo $GREEN_SELECTOR
+      
+      - export SELECTOR=$BLUE_SELECTOR
+      - echo $SELECTOR
+      - envsubst < service-patch.yml > ${TMP_PATCH}
+      - cat $TMP_PATCH
+      - kubectl patch svc green-coinbase-service -n ${NAMESPACE} -p "$(cat $TMP_PATCH)"
+      # green service selector 
+
+      - export SELECTOR=$GREEN_SELECTOR
+      - echo $SELECTOR
+      - envsubst < service-patch.yml > ${TMP_PATCH}
+      - cat $TMP_PATCH
+      - kubectl patch svc blue-coinbase-service -n ${NAMESPACE} -p "$(cat $TMP_PATCH)"
+  post_build:
+    commands:
+      - echo blue green deployment completed on `date`
+artifacts:
+  files:
+    - 'image*.json'
+  secondary-artifacts:
+    ImageArtifact:
+      files:
+        - imageDetail.json

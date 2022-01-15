@@ -1,0 +1,92 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_ACCOUNT_ID: '362392363900'
+    CLUSTER_NAME : 'my-cluster'
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 14
+    commands:
+      - apt install jq
+  pre_build:
+    commands:
+      - echo Installing Dependencies
+      - aws --version
+      - echo $AWS_ACCOUNT_ID
+      - echo $CLUSTER_NAME
+      - echo $NAMESPACE
+      # - echo $DEPLOYMENT_NAME
+      - echo $ENV
+      - aws eks --region $AWS_DEFAULT_REGION update-kubeconfig --name $CLUSTER_NAME
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$(cat imageDetail.json | jq -r '.repositoryUri')
+      - echo $REPOSITORY_URI
+      - IMAGE_TAG=$(cat imageDetail.json | jq -r '.tagId')
+      - echo $IMAGE_TAG
+      - export IMAGE_URI=$(cat imageDetail.json | jq -r '.ImageURI')
+      - echo $IMAGE_URI
+  build:
+    commands:
+      - echo ${ENV} deployment started on `date`
+
+      - |
+        if [ "$ENV" = "qa" ]; then
+            PULL_REPOSITORY_URI=$REPOSITORY_URI
+            echo $PULL_REPOSITORY_URI
+            PUSH_REPOSITORY_URI=$(echo "$PULL_REPOSITORY_URI" | sed -r 's/dev/qa/')
+            echo $PUSH_REPOSITORY_URI
+        fi
+      - |
+        if [ "$ENV" = "green" ]; then
+            PULL_REPOSITORY_URI=$(echo "$REPOSITORY_URI" | sed -r 's/dev/qa/')
+            echo $PULL_REPOSITORY_URI
+            PUSH_REPOSITORY_URI=$(echo "$PULL_REPOSITORY_URI" | sed -r 's/qa/prod/')
+            echo $PUSH_REPOSITORY_URI
+        fi
+      - | 
+        if [ "$ENV" = "qa" ] || [ "$ENV" = "green" ]; then
+            docker pull $PULL_REPOSITORY_URI:$IMAGE_TAG
+
+            docker tag $PULL_REPOSITORY_URI:$IMAGE_TAG $PUSH_REPOSITORY_URI:latest
+            docker push $PUSH_REPOSITORY_URI:latest
+
+            docker tag $PUSH_REPOSITORY_URI:latest $PUSH_REPOSITORY_URI:$IMAGE_TAG
+            docker push $PUSH_REPOSITORY_URI:$IMAGE_TAG
+            
+            export IMAGE_URI=$PUSH_REPOSITORY_URI:$IMAGE_TAG
+            echo $IMAGE_URI
+        fi
+
+
+      - echo $IMAGE_URI
+
+
+      - export TMP=/tmp/tmpDeploy.yaml
+      # Create the namespace if it does not exist 
+      - export IS_NAMSESPACE_EXIST=$(kubectl get namespaces | grep ${NAMESPACE} | wc -l)
+      - if [ ${IS_NAMSESPACE_EXIST} -eq 0 ]; then kubectl create namespace ${NAMESPACE}; fi;
+      # get the service details
+      - export SERVICE=$(kubectl get svc ${ENV}-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - echo $SERVICE
+      # Create the service if it does not exist
+      - if [ ! $SERVICE ]; then envsubst < coinbase-service-k8s.yaml > ${TMP}; kubectl apply -f ${TMP}; fi;
+      # Update the service if it exist
+      - if [ $SERVICE ]; then export TARGET_CONTAINER=$(kubectl get deployment ${SERVICE}-deployment -n ${NAMESPACE} -o json | jq -r .spec.template.spec.containers[0].name); kubectl set image deployment/${SERVICE}-deployment ${TARGET_CONTAINER}=${IMAGE_URI} -n ${NAMESPACE} --record; fi;
+      - echo TARGET_CONTAINER
+      # check the deployment rollout status
+      - export SERVICE=$(kubectl get svc ${ENV}-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - kubectl rollout status deployment/${SERVICE}-deployment -n ${NAMESPACE}
+  post_build:
+    commands:
+      - echo ${ENV} deployment completed on `date`
+artifacts:
+  files:
+    - 'image*.json'
+  secondary-artifacts:
+    ImageArtifact:
+      files:
+        - imageDetail.json
