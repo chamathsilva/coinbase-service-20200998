@@ -41,7 +41,7 @@ initializeConfigs().then(() => {
       nodeEnv: process.env.NODE_ENV,
       deploymentEnv: process.env.STAGE,
       versionId: process.env.VERSION_ID,
-      version: 'blue-12',
+      version: 'blue-13',
       envs: process.env
     };
     res.status(HttpStatus.OK).send(createSuccessResponse(health));
