@@ -79,6 +79,7 @@ phases:
       - echo TARGET_CONTAINER
       # check the deployment rollout status
       - export SERVICE=$(kubectl get svc ${ENV}-coinbase-service -n ${NAMESPACE} -o json | jq -r '.spec.selector."app.kubernetes.io/name"')
+      - kubectl scale deployments/${SERVICE}-deployment --replicas=3 -n ${NAMESPACE}
       - kubectl rollout status deployment/${SERVICE}-deployment -n ${NAMESPACE}
   post_build:
     commands:

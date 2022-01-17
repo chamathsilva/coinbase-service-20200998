@@ -61,6 +61,7 @@ phases:
       - envsubst < service-patch.yml > ${TMP_PATCH}
       - cat $TMP_PATCH
       - kubectl patch svc blue-coinbase-service -n ${NAMESPACE} -p "$(cat $TMP_PATCH)"
+      - kubectl scale deployments/${BLUE_SELECTOR}-deployment --replicas=0 -n ${NAMESPACE}
   post_build:
     commands:
       - echo blue green deployment completed on `date`
